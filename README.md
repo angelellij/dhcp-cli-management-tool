@@ -2,6 +2,9 @@
 
 A lightweight CLI tool for managing **DHCP reservations** and generating ISC DHCP configuration on Linux systems.
 
+## -------------------
+## WORK IN PROGRESS !!
+## -------------------
 
 ## Features
 - Create new DHCP reservations (`drt new`)
