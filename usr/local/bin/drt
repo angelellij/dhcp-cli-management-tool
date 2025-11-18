@@ -8,13 +8,11 @@ usage() {
     echo "Usage:"
     echo "  drt new [-f] <dns_name> <mac> <ip>"
     echo "  drt add <mac> <ip>"
-    echo "  drt delete <ip> <mac>"
-    echo "  drt update-dns <ip> <dns_name>"
-    echo "  drt update-ip <ip> <new_ip>"
-    echo "  drt update-mac <ip> <mac>"
+    echo "  drt pop <ip> <mac>"
+    echo "  drt update <ip> <new_value> (auto-detect DNS, IP, or MAC)"
     echo "  drt search <query>"
     echo "  drt list"
-    echo "  drt remove <ip>"
+    echo "  drt delete <ip>"
     echo "  drt create-conf"
     exit 1
 }
@@ -33,6 +31,14 @@ list_reservations() {
             printf "%-15s %-20s %-20s\n" "$IP" "$MAC" "$NAME"
         done
     done
+}
+
+is_ip() {
+    [[ $1 =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]
+}
+
+is_mac() {
+    [[ $1 =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]
 }
 
 case "$1" in
@@ -66,7 +72,7 @@ EOF
         echo "Added MAC $MAC to $IP"; reload_dhcp
         ;;
 
-    delete)
+    pop)
         [ $# -ne 3 ] && usage
         IP="$2"; MAC="$3"; FILE="$RES_DIR/$IP.conf"
         [ ! -f "$FILE" ] && echo "Reservation for $IP does not exist." && exit 1
@@ -79,30 +85,23 @@ EOF
         reload_dhcp
         ;;
 
-    update-dns)
+    update)
         [ $# -ne 3 ] && usage
-        IP="$2"; NEWDNS="$3"; FILE="$RES_DIR/$IP.conf"
+        IP="$2"; NEWVAL="$3"; FILE="$RES_DIR/$IP.conf"
         [ ! -f "$FILE" ] && echo "Reservation for $IP does not exist." && exit 1
-        sed -i "s/^host .*/host $NEWDNS {/" "$FILE"
-        echo "Updated DNS name for $IP to $NEWDNS"; reload_dhcp
-        ;;
-
-    update-ip)
-        [ $# -ne 3 ] && usage
-        OLDIP="$2"; NEWIP="$3"; FILE="$RES_DIR/$OLDIP.conf"
-        [ ! -f "$FILE" ] && echo "Reservation for $OLDIP does not exist." && exit 1
-        sed -i "s/fixed-address .*/fixed-address $NEWIP;/" "$FILE"
-        mv "$FILE" "$RES_DIR/$NEWIP.conf"
-        echo "Updated IP from $OLDIP to $NEWIP"; reload_dhcp
-        ;;
-
-    update-mac)
-        [ $# -ne 3 ] && usage
-        IP="$2"; NEWMAC="$3"; FILE="$RES_DIR/$IP.conf"
-        [ ! -f "$FILE" ] && echo "Reservation for $IP does not exist." && exit 1
-        sed -i "/hardware ethernet/d" "$FILE"
-        sed -i "/fixed-address/a \    hardware ethernet $NEWMAC;" "$FILE"
-        echo "Replaced all MACs for $IP with $NEWMAC"; reload_dhcp
+        if is_ip "$NEWVAL"; then
+            sed -i "s/fixed-address .*/fixed-address $NEWVAL;/" "$FILE"
+            mv "$FILE" "$RES_DIR/$NEWVAL.conf"
+            echo "Updated IP from $IP to $NEWVAL"
+        elif is_mac "$NEWVAL"; then
+            sed -i "/hardware ethernet/d" "$FILE"
+            sed -i "/fixed-address/a \    hardware ethernet $NEWVAL;" "$FILE"
+            echo "Replaced all MACs for $IP with $NEWVAL"
+        else
+            sed -i "s/^host .*/host $NEWVAL {/" "$FILE"
+            echo "Updated DNS name for $IP to $NEWVAL"
+        fi
+        reload_dhcp
         ;;
 
     search)
@@ -115,7 +114,7 @@ EOF
         list_reservations
         ;;
 
-    remove)
+    delete)
         [ $# -ne 2 ] && usage
         IP="$2"; FILE="$RES_DIR/$IP.conf"
         [ ! -f "$FILE" ] && echo "Reservation for $IP does not exist." && exit 1

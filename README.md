@@ -6,13 +6,11 @@ A lightweight CLI tool for managing **DHCP reservations** and generating ISC DHC
 ## Features
 - Create new DHCP reservations (`drt new`)
 - Append additional MAC addresses to a reservation (`drt add`)
-- Remove MAC from reservation (`drt delete`)
-- Update DNS name from reservation (`drt update-dns`)
-- Update IP in a reservation (`drt update-ip`)
-- Replace all MACs from a reservation with a new one (`drt update-mac`)
+- Remove MAC address from a reservation (`drt pop`)
+- Update a reservation (replaces ip, dns or mac based on argument) (`drt update`)
 - Search reservations (`drt search`)
 - List reservations (`drt list`)
-- Remove reservation (`drt remove`)
+- Remove reservation (`drt delete`)
 - Interactively create DHCP config (`drt create-conf`)
 
 ## Installation
