@@ -257,4 +257,50 @@ cmd_create_conf() {
     echo "Creating /etc/dhcp/dhcpd.conf..."
     read -p "Domain name (default: business.lan): " DOMAIN; DOMAIN=${DOMAIN:-business.lan}
     read -p "Default lease time (default: 600): " DLT; DLT=${DLT:-600}
-    read -p "Max lease tim
+    read -p "Max lease time (default: 7200): " MLT; MLT=${MLT:-7200}
+    read -p "Subnet (default: 192.168.1.0): " SUBNET; SUBNET=${SUBNET:-192.168.1.0}
+    read -p "Netmask (default: 255.255.255.0): " NETMASK; NETMASK=${NETMASK:-255.255.255.0}
+    read -p "DHCP range start (default: 192.168.1.100): " RANGE_START; RANGE_START=${RANGE_START:-192.168.1.100}
+    read -p "DHCP range end (default: 192.168.1.200): " RANGE_END; RANGE_END=${RANGE_END:-192.168.1.200}
+    read -p "Router IP (default: 192.168.1.1): " ROUTER; ROUTER=${ROUTER:-192.168.1.1}
+    read -p "DNS servers (default: 8.8.8.8, 4.4.4.4): " DNS; DNS=${DNS:-8.8.8.8, 4.4.4.4}
+
+    ensure_file
+
+    mkdir -p "$(dirname "$CONF_FILE")"
+    cat <<EOF > "$CONF_FILE"
+option domain-name "$DOMAIN";
+option domain-name-servers $DNS;
+default-lease-time $DLT;
+max-lease-time $MLT;
+authoritative;
+
+subnet $SUBNET netmask $NETMASK {
+    range $RANGE_START $RANGE_END;
+    option routers $ROUTER;
+}
+
+include "$RES_FILE";
+EOF
+
+    echo "Wrote $CONF_FILE"
+    # optionally test config
+    if dhcpd -t -cf "$CONF_FILE" 2>/tmp/dhcpd_test.err; then
+        echo "dhcpd config test OK"
+        systemctl restart "$DHCP_SERVICE"
+    else
+        echo "dhcpd config test FAILED. See /tmp/dhcpd_test.err"
+        sed -n '1,200p' /tmp/dhcpd_test.err
+    fi
+}
+
+# Main dispatcher
+case "$1" in
+    new)    shift; cmd_new "$@" ;;
+    update) shift; cmd_update "$@" ;;
+    search) shift; cmd_search "$@" ;;
+    list)   cmd_list ;;
+    delete) shift; cmd_delete "$@" ;;
+    create-conf) cmd_create_conf ;;
+    *) usage ;;
+esac
