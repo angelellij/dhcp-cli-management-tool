@@ -138,7 +138,10 @@ cmd_list() {
 
 cmd_search() {
     [ $# -ne 1 ] && usage
-    cmd_list | grep -i -- "$1" || echo "No matches found."
+    if [ "$(classify_arg "$1")" = "other" ]; then
+        echo "Argument is not an IP, MAC or valid DNS: $1"
+    fi
+    cmd_list | grep -i -- "$1 " || echo "No matches found."
 }
 
 # ---------------------------
