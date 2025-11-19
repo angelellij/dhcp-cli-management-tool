@@ -90,7 +90,7 @@ cmd_list() {
     echo "-----------------------------------------------------------------"
 
     awk '
-        BEGIN { RS=""; FS="\n" }
+        BEGIN { RS=""; FS="}" }
         /host[ \t]+/ {
             host=""; ip=""; mac=""
             for(i=1;i<=NF;i++){
@@ -176,7 +176,6 @@ cmd_new() {
         echo "    hardware ethernet $MAC;"
         echo "    fixed-address $IP;"
         echo "}"
-        echo
     } | sudo tee -a "$RES_FILE" >/dev/null
 
     echo "Created reservation: $DNS -> $IP (MAC: $MAC)"
