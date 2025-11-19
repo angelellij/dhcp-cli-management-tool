@@ -2,3 +2,4 @@
 mkdir -p /etc/dhcp/reservations
 chmod 755 /etc/dhcp/reservations
 echo "dhcp-reservation-tool installed. Use 'drt' command."
+rm dhcp-reservation-tool -rf
