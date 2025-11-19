@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# drt - DHCP reservation tool (single /etc/dhcp/reservations.conf)
-# Commands: new, update, search, list, delete, create-conf
 
 RES_FILE="/etc/dhcp/reservations.conf"
 DHCP_SERVICE="isc-dhcp-server"
@@ -9,12 +7,18 @@ CONF_FILE="/etc/dhcp/dhcpd.conf"
 usage() {
     cat <<USG
 Usage:
-  drt new <IP> <MAC> <DNS_NAME>
-  drt update <IP> <new_value>     (new_value can be MAC, IP, or hostname)
-  drt search <query>
+  drt add <IP> <MAC> <DNS_NAME>
+    -> Creates a add static ip with the given data
+  drt update <MAC, or DNS_NAME> <IP, MAC, or DNS_NAME>
+    -> Replaces on found entry (using the first argument to search), the value (provided by the second argument)
   drt list
-  drt delete <DNS_NAME>
+    -> Prints a list of all static ips data
+  drt search <IP, MAC, or DNS_NAME>
+    -> Searches in the list for the data associated to that IP, MAC or DNS
+  drt remove <IP, MAC, or DNS_NAME>
+    -> Removes all entries related to that IP, MAC or DNS
   drt create-conf
+    -> Creates/Replaces /etc/dhcp/dhcpd.conf with a config file made through interactive CLI
 USG
     exit 1
 }
@@ -74,12 +78,56 @@ classify_arg() {
         echo "dns"
         return 0
     fi
-
-    # If the string is neither IP, MAC, nor valid hostname → treat as 'dns'
     echo "other"
     return 0
 }
 
+# ---------------------------
+# HELPERS FUNCTIONS
+# ---------------------------
+
+find_hosts_by_ip() {
+    local ip="$1"
+    awk -v ip="$ip" '
+        BEGIN {RS=""; FS="\n"}
+        {
+            host=""; has_ip=0
+            for(i=1;i<=NF;i++){
+                line=$i
+
+                if (line ~ /^host[ \t]+/) {
+                    t=line
+                    sub(/^host[ \t]+/, "", t)
+                    sub(/[ \t]*\{.*$/, "", t)
+                    host=t
+                }
+
+                if (line ~ ("fixed-address " ip ";"))
+                    has_ip=1
+            }
+            if (has_ip && host != "") print host
+        }
+    ' "$RES_FILE"
+}
+
+warn_duplicates_for_ip() {
+    local ip="$1"
+    local skip="$2"
+
+    mapfile -t hlist < <(find_hosts_by_ip "$ip")
+    if [ ${#hlist[@]} -gt 1 ]; then
+        echo
+        echo "⚠ Warning: Multiple hosts use IP $ip:"
+        for h in "${hlist[@]}"; do
+            if [ "$h" == "$skip" ]; then
+                echo "  - $h (just modified)"
+            else
+                echo "  - $h"
+            fi
+        done
+        echo
+    fi
+}
 
 # ---------------------------
 # LIST
@@ -145,10 +193,10 @@ cmd_search() {
 }
 
 # ---------------------------
-# NEW
+# ADD
 # ---------------------------
 
-cmd_new() {
+cmd_add() {
     [ $# -ne 3 ] && usage
     IP="$1"; MAC="$2"; DNS="$3"
 
@@ -192,10 +240,10 @@ cmd_new() {
 }
 
 # ---------------------------
-# DELETE
+# REMOVE
 # ---------------------------
 
-cmd_delete() {
+cmd_remove() {
     [ $# -ne 1 ] && usage
     local arg="$1"
 
@@ -203,7 +251,7 @@ cmd_delete() {
     value="$(drt search "$arg" | grep -i -- "$arg" | awk '{print $1}')"
 
     if [ -z "$value" ]; then
-        echo "Nothing deleted. No DNS/IP/MAC matched: $arg"
+        echo "Nothing removed. No DNS/IP/MAC matched: $arg"
         return 1
     fi
 
@@ -213,195 +261,70 @@ cmd_delete() {
 
         if hostname_exists "$value"; then
             sed -i "/^host[[:space:]]\+$dns[[:space:]]*{/,/}/d" "$RES_FILE"
-            echo "Deleted reservation for DNS: $value"
+            echo "Removed reservation for DNS: $value"
         fi
     done <<< "$value"
 
-    warn_all_duplicates
     reload_dhcp
 }
-
-
-
-# ---------------------------
-# HELPERS FOR UPDATE
-# ---------------------------
-
-find_hosts_by_ip() {
-    local ip="$1"
-    awk -v ip="$ip" '
-        BEGIN {RS=""; FS="\n"}
-        {
-            host=""; has_ip=0
-            for(i=1;i<=NF;i++){
-                line=$i
-
-                if (line ~ /^host[ \t]+/) {
-                    t=line
-                    sub(/^host[ \t]+/, "", t)
-                    sub(/[ \t]*\{.*$/, "", t)
-                    host=t
-                }
-
-                if (line ~ ("fixed-address " ip ";"))
-                    has_ip=1
-            }
-            if (has_ip && host != "") print host
-        }
-    ' "$RES_FILE"
-}
-
-warn_duplicates_for_ip() {
-    local ip="$1"
-    local skip="$2"
-
-    mapfile -t hlist < <(find_hosts_by_ip "$ip")
-    if [ ${#hlist[@]} -gt 1 ]; then
-        echo
-        echo "⚠ Warning: Multiple hosts use IP $ip:"
-        for h in "${hlist[@]}"; do
-            if [ "$h" == "$skip" ]; then
-                echo "  - $h (just modified)"
-            else
-                echo "  - $h"
-            fi
-        done
-        echo
-    fi
-}
-
-warn_all_duplicates() {
-    ensure_file
-    awk '
-        BEGIN { RS=""; FS="\n" }
-        {
-            hosts=""; ip=""
-            for(i=1;i<=NF;i++){
-                line=$i
-
-                if (line ~ /^host[ \t]+/) {
-                    t=line
-                    sub(/^host[ \t]+/, "", t)
-                    sub(/[ \t]*\{.*$/, "", t)
-                    hosts = hosts " " t
-                }
-
-                if (line ~ /fixed-address/) {
-                    t=line
-                    sub(/.*fixed-address[ \t]+/, "", t)
-                    sub(/;.*/, "", t)
-                    ip=t
-                }
-            }
-
-            if (ip != "") {
-                sub(/^ /, "", hosts)
-                split(hosts, arr, " ")
-                if (length(arr) > 1)
-                    print "⚠ Warning: IP " ip " used by hosts:" hosts
-            }
-        }
-    ' "$RES_FILE"
-}
-
-# ---------------------------
-# UPDATE
-# ---------------------------
 
 cmd_update() {
     [ $# -ne 2 ] && usage
 
-    OLD_IP="$1"
-    NEWVAL="$2"
+    ARG="$1"      # Search Argument (DNS or MAC)
+    NEWVAL="$2"   # New Value (DNS, MAC, or IP)
 
-    ensure_file
+    ARG_TYPE=$(classify_arg "$ARG")
+    NEWVAL_TYPE=$(classify_arg "$NEWVAL")
 
-    if ! is_ip "$OLD_IP"; then 
-        echo "First parameter must be an IP address."
+    if [[ "$ARG_TYPE" == "other" || "$NEWVAL_TYPE" == "other" ]]; then
+        echo "Error: Invalid argument(s). First argument must be DNS or MAC, second must be DNS, MAC, or IP."
         exit 1
     fi
 
-    # Find hosts matching old IP
-    mapfile -t HOSTS < <(find_hosts_by_ip "$OLD_IP")
-
-    if [ ${#HOSTS[@]} -eq 0 ]; then
-        echo "No hosts with fixed-address $OLD_IP"
-        exit 1
-    fi
-
-    CHANGED=()
-
-    # -----------------------------------------------------------
-    # CASE 1 — MAC UPDATE
-    # -----------------------------------------------------------
-    if is_mac "$NEWVAL"; then
-        if mac_exists "$NEWVAL"; then
-            echo "Error: MAC already exists elsewhere: $NEWVAL"
+    # Find entry
+    if [ "$ARG_TYPE" = "mac" ]; then
+        
+        HOST=$(cmd_list | awk -v mac="$ARG" '$3 ~ mac {print $1}')
+        if [ -z "$HOST" ]; then
+            echo "No host found with MAC $ARG"
             exit 1
         fi
-
-        for h in "${HOSTS[@]}"; do
-            sudo sed -i \
-                "/^host[[:space:]]\+$h[[:space:]]*{/,/}/ s/hardware ethernet[[:space:]]\+.*;/    hardware ethernet $NEWVAL;/" \
-                "$RES_FILE"
-
-            echo "Updated MAC for $h -> $NEWVAL"
-            CHANGED+=("MAC change: $h -> $NEWVAL")
-        done
-
-    # -----------------------------------------------------------
-    # CASE 2 — IP UPDATE
-    # -----------------------------------------------------------
-    elif is_ip "$NEWVAL"; then
-        for h in "${HOSTS[@]}"; do
-            sudo sed -i \
-                "/^host[[:space:]]\+$h[[:space:]]*{/,/}/ s/fixed-address[[:space:]]\+.*;/    fixed-address $NEWVAL;/" \
-                "$RES_FILE"
-
-            echo "Updated IP for $h -> $NEWVAL"
-            CHANGED+=("IP change: $h -> $NEWVAL")
-        done
-
-    # -----------------------------------------------------------
-    # CASE 3 — HOSTNAME UPDATE
-    # -----------------------------------------------------------
+    elif [ "$ARG_TYPE" = "dns" ]; then
+        if ! hostname_exists "$ARG"; then
+            echo "No host found with DNS $ARG"
+            exit 1
+        fi
+        HOST="$ARG"
     else
-        if ! is_hostname "$NEWVAL"; then
-            echo "Invalid hostname: $NEWVAL"
-            exit 1
-        fi
-
-        # Only one host should match because you disallowed multiple-MAC blocks
-        old="${HOSTS[0]}"
-
-        # Check if new hostname exists
-        if hostname_exists "$NEWVAL"; then
-            echo "Error: Hostname '$NEWVAL' already exists."
-            exit 1
-        fi
-
-        sudo sed -i \
-            "s/^host[[:space:]]\+$old[[:space:]]*{/host $NEWVAL {/" \
-            "$RES_FILE"
-
-        echo "Renamed host '$old' -> '$NEWVAL'"
-        CHANGED+=("Rename: $old -> $NEWVAL")
+        echo "Error: Invalid argument. First argument must be a DNS or MAC"
+        exit 1
     fi
 
-    # -----------------------------------------------------------
-    # SUMMARY + WARNINGS
-    # -----------------------------------------------------------
-    echo
-    echo "=== Applied changes ==="
-    for c in "${CHANGED[@]}"; do
-        echo " - $c"
-    done
-    echo "======================="
+    # Modify entry
+    if [ "$NEWVAL_TYPE" = "mac" ]; then
+        if mac_exists "$NEWVAL"; then
+            echo "Error: MAC $NEWVAL already exists"
+            exit 1
+        fi
+        sudo sed -i "/^host[[:space:]]\+$HOST[[:space:]]*{/,/}/ s/hardware ethernet[[:space:]]\+.*;/    hardware ethernet $NEWVAL;/" "$RES_FILE"
+        echo "Updated MAC for $HOST -> $NEWVAL"
 
-    warn_all_duplicates
+    elif [ "$NEWVAL_TYPE" = "ip" ]; then
+        sudo sed -i "/^host[[:space:]]\+$HOST[[:space:]]*{/,/}/ s/fixed-address[[:space:]]\+.*;/    fixed-address $NEWVAL;/" "$RES_FILE"
+        echo "Updated IP for $HOST -> $NEWVAL"
+
+    elif [ "$NEWVAL_TYPE" = "dns" ]; then
+        if hostname_exists "$NEWVAL"; then
+            echo "Error: hostname '$NEWVAL' already exists"
+            exit 1
+        fi
+        sudo sed -i "s/^host[[:space:]]\+$HOST[[:space:]]*{/host $NEWVAL {/" "$RES_FILE"
+        echo "Renamed host '$HOST' -> '$NEWVAL'"
+    fi
+
     reload_dhcp
 }
-
 
 # ---------------------------
 # CREATE-CONF
@@ -470,11 +393,11 @@ EOF
 # ---------------------------
 
 case "$1" in
-    new) shift; cmd_new "$@" ;;
+    add) shift; cmd_add "$@" ;;
     update) shift; cmd_update "$@" ;;
     search) shift; cmd_search "$@" ;;
     list) cmd_list ;;
-    delete) shift; cmd_delete "$@" ;;
+    remove) shift; cmd_remove "$@" ;;
     create-conf) cmd_create_conf ;;
     *) usage ;;
 esac
