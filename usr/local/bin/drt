@@ -57,6 +57,30 @@ reload_dhcp() {
     systemctl reload "$DHCP_SERVICE" 2>/dev/null || systemctl restart "$DHCP_SERVICE"
 }
 
+classify_arg() {
+    local arg="$1"
+
+    if is_ip "$arg"; then
+        echo "ip"
+        return 0
+    fi
+
+    if is_mac "$arg"; then
+        echo "mac"
+        return 0
+    fi
+
+    if is_hostname "$arg"; then
+        echo "dns"
+        return 0
+    fi
+
+    # If the string is neither IP, MAC, nor valid hostname → treat as 'dns'
+    echo "other"
+    return 0
+}
+
+
 # ---------------------------
 # LIST
 # ---------------------------
@@ -165,42 +189,37 @@ cmd_new() {
 # ---------------------------
 
 cmd_delete() {
+    [ $# -ne 1 ] && usage
     local arg="$1"
-    local arg_up
-    arg_up="$(echo "$arg" | tr 'a-f' 'A-F')"
 
-    # --- CASE: DNS NAME ---------------------------------------------------------
-    if dns_exists "$arg"; then
-        # Remove the whole host {} block
-        sed -i "/host[[:space:]]\+$arg[[:space:]]*{/,/}/d" "$RES_FILE"
+    ensure_file
 
-        echo "Deleted reservation for DNS name: $arg"
-        return 0
+    # Use your own search output to find the DNS name
+    # cmd_search prints lines like:
+    # DNS_NAME   IP   MAC
+    local dns_list
+    dns_list="$(cmd_list | grep -i -- "$arg" | awk 'NR>1 {print $1}')"
+
+    if [ -z "$dns_list" ]; then
+        echo "Nothing deleted. No DNS/IP/MAC matched: $arg"
+        return 1
     fi
 
-    # --- CASE: MAC ADDRESS ------------------------------------------------------
-    if mac_exists "$arg"; then
-        # Delete only the MAC line from its block
-        sed -i "/hardware[[:space:]]\+ethernet[[:space:]]\+$arg_up;/d" "$RES_FILE"
+    # Process each matched DNS record
+    while read -r dns; do
+        [ -z "$dns" ] && continue
 
-        echo "Deleted MAC address: $arg_up"
-        echo "Warning: Reservation block may now be incomplete if no MACs remain."
-        return 0
-    fi
+        if hostname_exists "$dns"; then
+            sed -i "/^host[[:space:]]\+$dns[[:space:]]*{/,/}/d" "$RES_FILE"
+            echo "Deleted reservation for DNS: $dns"
+        fi
+    done <<< "$dns_list"
 
-    # --- CASE: IP ADDRESS -------------------------------------------------------
-    if ip_exists "$arg"; then
-        # Remove entire blocks matching this IP
-        sed -i "/fixed-address[[:space:]]\+$arg;/,/}/d" "$RES_FILE"
-
-        echo "Deleted reservation(s) for IP: $arg"
-        return 0
-    fi
-
-    # --- NOT FOUND --------------------------------------------------------------
-    echo "Nothing deleted. No DNS name, MAC, or IP matched: $arg" >&2
-    return 1
+    warn_all_duplicates
+    reload_dhcp
 }
+
+
 
 # ---------------------------
 # HELPERS FOR UPDATE
