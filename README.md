@@ -1,26 +1,24 @@
-# DHCP Reservation Tool (`drt`)
+# DHCP CLI Management Tool (`drt`)
 
-A lightweight CLI tool for managing **DHCP reservations** and generating ISC DHCP configuration on Linux systems.
+A lightweight CLI tool for managing **DHCP static ips** and generating ISC DHCP configuration on Linux systems.
 
 ## -------------------
 ## WORK IN PROGRESS !!
 ## -------------------
 
 ## Features
-- Create new DHCP reservations (`drt new`)
-- Append additional MAC addresses to a reservation (`drt add`)
-- Remove MAC address from a reservation (`drt pop`)
-- Update a reservation (replaces ip, dns or mac based on argument) (`drt update`)
-- Search reservations (`drt search`)
-- List reservations (`drt list`)
-- Remove reservation (`drt delete`)
+- Create new DHCP static ip (`drt add`)
+- Update a static ip (replaces ip, dns or mac based on argument) (`drt update`)
+- Search static ips (`drt search`)
+- List static ips (`drt list`)
+- Remove static ip (`drt remove`)
 - Interactively create DHCP config (`drt create-conf`)
 
 ## Installation
 ```bash
-sudo chmod 755 dhcp-reservation-tool/DEBIAN/postinst
-dpkg-deb --build dhcp-reservation-tool
-sudo dpkg -i dhcp-reservation-tool.deb
+sudo chmod 755 dhcp-cli-management-tool/DEBIAN/postinst
+dpkg-deb --build dhcp-cli-management-tool
+sudo dpkg -i dhcp-cli-management-tool.deb
 sudo chmod +x /usr/local/bin/drt
 ```
 

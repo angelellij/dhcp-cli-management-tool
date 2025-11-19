@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 
-RES_FILE="/etc/dhcp/reservations.conf"
+RES_FILE="/etc/dhcp/dcmt.conf"
 DHCP_SERVICE="isc-dhcp-server"
 CONF_FILE="/etc/dhcp/dhcpd.conf"
 
 usage() {
     cat <<USG
-Usage:
-  drt add <IP> <MAC> <DNS_NAME>
+---------------------
+DHCP CLI Management Tool
+---------------------
+
+How to use:
+
+  sudo dcmt add <IP> <MAC> <DNS_NAME>
     -> Creates a add static ip with the given data
-  drt update <MAC, or DNS_NAME> <IP, MAC, or DNS_NAME>
+  sudo dcmt update <MAC, or DNS_NAME> <IP, MAC, or DNS_NAME>
     -> Replaces on found entry (using the first argument to search), the value (provided by the second argument)
-  drt list
+  dcmt list
     -> Prints a list of all static ips data
-  drt search <IP, MAC, or DNS_NAME>
+  dcmt search <IP, MAC, or DNS_NAME>
     -> Searches in the list for the data associated to that IP, MAC or DNS
-  drt remove <IP, MAC, or DNS_NAME>
+  sudo dcmt remove <IP, MAC, or DNS_NAME>
     -> Removes all entries related to that IP, MAC or DNS
-  drt create-conf
+  sudo dcmt create-conf
     -> Creates/Replaces /etc/dhcp/dhcpd.conf with a config file made through interactive CLI
 USG
     exit 1
@@ -234,7 +239,7 @@ cmd_add() {
         echo "}"
     } | sudo tee -a "$RES_FILE" >/dev/null
 
-    echo "Created reservation: $DNS -> $IP (MAC: $MAC)"
+    echo "Created static ip: $DNS -> $IP (MAC: $MAC)"
     warn_duplicates_for_ip "$IP" "$DNS"
     reload_dhcp
 }
@@ -248,7 +253,7 @@ cmd_remove() {
     local arg="$1"
 
     local value
-    value="$(drt search "$arg" | grep -i -- "$arg" | awk '{print $1}')"
+    value="$(dcmt search "$arg" | grep -i -- "$arg" | awk '{print $1}')"
 
     if [ -z "$value" ]; then
         echo "Nothing removed. No DNS/IP/MAC matched: $arg"
@@ -261,7 +266,7 @@ cmd_remove() {
 
         if hostname_exists "$value"; then
             sed -i "/^host[[:space:]]\+$dns[[:space:]]*{/,/}/d" "$RES_FILE"
-            echo "Removed reservation for DNS: $dns"
+            echo "Removed static ip for DNS: $dns"
         fi
     done <<< "$value"
 

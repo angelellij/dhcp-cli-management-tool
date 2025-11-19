@@ -1,9 +1,9 @@
-Package: dhcp-reservation-tool
-Version: 1.1
+Package: dhcp-cli-management-tool
+Version: 1.0
 Section: admin
 Priority: optional
 Architecture: all
 Maintainer: Javier Angelelli <angelellij@gmail.com>
 Depends: isc-dhcp-server
-Description: DHCP Reservation Management Tool
- Provides simple commands to manage DHCP reservations and configuration for non-savy CLI users.
+Description: DHCP CLI Management Tool
+ Provides simple commands to manage DHCP static ips and configuration for non-savy CLI users.
