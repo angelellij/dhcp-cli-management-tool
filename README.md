@@ -18,9 +18,10 @@ A lightweight CLI tool for managing **DHCP reservations** and generating ISC DHC
 
 ## Installation
 ```bash
-chmod 755 dhcp-reservation-tool/DEBIAN/postinst
+sudo chmod 755 dhcp-reservation-tool/DEBIAN/postinst
 dpkg-deb --build dhcp-reservation-tool
 sudo dpkg -i dhcp-reservation-tool.deb
+sudo chmod +x /usr/local/bin/drt
 ```
 
 ## Disclaimer
