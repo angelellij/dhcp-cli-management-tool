@@ -261,12 +261,16 @@ cmd_remove() {
 
         if hostname_exists "$value"; then
             sed -i "/^host[[:space:]]\+$dns[[:space:]]*{/,/}/d" "$RES_FILE"
-            echo "Removed reservation for DNS: $value"
+            echo "Removed reservation for DNS: $dns"
         fi
-    done <<< "$value"
+    done
 
     reload_dhcp
 }
+
+# ---------------------------
+# UPDATE
+# ---------------------------
 
 cmd_update() {
     [ $# -ne 2 ] && usage
